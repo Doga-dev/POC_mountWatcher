@@ -41,5 +41,8 @@ int main(int argc, char * argv[]) {
 
     MyDir dir{mountPoint, & a};
 
+    QObject::connect(& dir, & MyDir::directoryMountingChecked, [&](bool isMounted) {
+        qDebug() << "==> Le répertoire" << (isMounted ? "est" : "n'est pas") << "monté.";
+    });
     return a.exec();
 }

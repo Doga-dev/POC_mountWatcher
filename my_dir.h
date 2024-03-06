@@ -30,23 +30,30 @@
 #include <QFileSystemWatcher>
 #include <QTimer>
 #include <QTime>
+#include <QFutureWatcher>
 
 class MyDir : public QObject
 {
     Q_OBJECT
 public:
-    explicit    MyDir                   (const QString & path, QObject * parent = nullptr);
+    explicit    MyDir                       (const QString & path, QObject * parent = nullptr);
+
+signals:
+    void        directoryMountingChecked    (bool isMounted);
 
 private slots:
-    void        sltwatcherDirChanged    (const QString & path);
-    void        sltTimeout              ();
+    void        sltwatcherDirChanged        (const QString & path);
+    void        sltTimeout                  ();
+    void        sltCheckDirectoryMounted    ();
+    void        sltCheckTaskCompletion      ();
 
 private:
-    QString             m_path;
-    QTimer              m_timer;
-    QFileSystemWatcher  m_watcher;
-    quint32             m_iter;
-    QTime               m_time;
+    QString                 m_path;
+    QTimer                  m_timer;
+    QFileSystemWatcher      m_watcher;
+    quint32                 m_iter;
+    QTime                   m_time;
+    QFutureWatcher<void>    m_futureWatcher;
 };
 
 #endif // MY_DIR_H
