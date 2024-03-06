@@ -23,37 +23,42 @@
  *
  ****************************************************************************
  */
+
 #ifndef MY_DIR_H
 #define MY_DIR_H
 
-#include <QObject>
 #include <QFileSystemWatcher>
+#include <QObject>
+#include <QPointer>
+#include <QString>
 #include <QTimer>
-#include <QTime>
-#include <QFutureWatcher>
+
+class DirectoryCheckerThread;
 
 class MyDir : public QObject
 {
     Q_OBJECT
 public:
     explicit    MyDir                       (const QString & path, QObject * parent = nullptr);
+    virtual     ~MyDir                      ();
+
+    bool        isMounted                   () const    {   return m_isMounted; }
 
 signals:
-    void        directoryMountingChecked    (bool isMounted);
+    void        directoryMountingChanged    (bool isMounted);
 
 private slots:
     void        sltwatcherDirChanged        (const QString & path);
-    void        sltTimeout                  ();
     void        sltCheckDirectoryMounted    ();
     void        sltCheckTaskCompletion      ();
+    void        setIsMounted                (bool isMounted);
 
 private:
-    QString                 m_path;
-    QTimer                  m_timer;
-    QFileSystemWatcher      m_watcher;
-    quint32                 m_iter;
-    QTime                   m_time;
-    QFutureWatcher<void>    m_futureWatcher;
+    QString                             m_path;
+    QTimer                              m_timer;
+    QFileSystemWatcher                  m_watcher;
+    QPointer<DirectoryCheckerThread>    m_checker;
+    bool                                m_isMounted;
 };
 
 #endif // MY_DIR_H

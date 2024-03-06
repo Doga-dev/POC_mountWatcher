@@ -1,8 +1,8 @@
 /*!
- * \file main.cpp
- * \brief file for the definition of the main function
+ * \file directory_checker.h
+ * \brief file for the definition of the class "DirectoryChecker"
  * \author doga
- * \date 2024-3-5
+ * \date 2024-3-6
  *
  * \details
  *
@@ -24,28 +24,27 @@
  ****************************************************************************
  */
 
-#include <QCoreApplication>
-#include <QDebug>
+#ifndef DIRECTORY_CHECKER_H
+#define DIRECTORY_CHECKER_H
+
 #include <QObject>
 #include <QString>
 
-#include "my_dir.h"
+class DirectoryChecker : public QObject
+{
+    Q_OBJECT
+public:
+    explicit    DirectoryChecker        (const QString & path);
+    virtual     ~DirectoryChecker       ();
 
+public slots:
+    void        checkMounting           ();
 
-int main(int argc, char * argv[]) {
-    QCoreApplication a(argc, argv);
+signals:
+    void        directoryChecked        (bool isMounted);
 
-    if (argc != 2) {
-        qDebug() << "Usage: " << argv[0] << " <mountPoint>";
-        return 1;
-    }
+private:
+    QString     m_path;
+};
 
-    QString mountPoint = argv[1];
-
-    MyDir dir{mountPoint, & a};
-
-    QObject::connect(& dir, & MyDir::directoryMountingChanged, [&](bool isMounted) {
-        qDebug() << "==> Le répertoire" << (isMounted ? "est" : "n'est pas") << "monté.";
-    });
-    return a.exec();
-}
+#endif // DIRECTORY_CHECKER_H

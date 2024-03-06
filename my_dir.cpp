@@ -23,16 +23,14 @@
  *
  ****************************************************************************
  */
+
 #include "my_dir.h"
 
-#include <QDebug>
-#include <QDir>
-#include <QFileInfo>
+#include "directory_checker_thread.h"
+
 #include <QFileSystemWatcher>
-#include <QFuture>
 #include <QObject>
-#include <QStorageInfo>
-#include <QtConcurrent>
+#include <QString>
 #include <QTimer>
 
 MyDir::MyDir(const QString & path, QObject * parent)
@@ -40,88 +38,69 @@ MyDir::MyDir(const QString & path, QObject * parent)
     , m_path(path)
     , m_timer(this)
     , m_watcher(this)
-    , m_iter(0)
-    , m_time()
-    , m_futureWatcher()
+    , m_checker(nullptr)
+    , m_isMounted(false)
 {
-    // Ajouter le point de montage à surveiller
-    m_watcher.addPath(m_path);
-    qDebug() << "Surveillance du dossier" << m_path << "en cours...";
-
+    // Définir l'interval de surveillance du dossier
     m_timer.setInterval(5000);
-    m_timer.setSingleShot(false);
-    QObject::connect(& m_timer, & QTimer::timeout, this, & MyDir::sltTimeout);
-    m_timer.start();
+    m_timer.setSingleShot(true);
+    QObject::connect(& m_timer, & QTimer::timeout, this, & MyDir::sltCheckDirectoryMounted);
 
-    // Connecter le signal directoryChanged
+    // Connecter le signal directoryChanged du FileSystemWatcher
     QObject::connect(& m_watcher, & QFileSystemWatcher::directoryChanged, this, & MyDir::sltwatcherDirChanged);
+
+    sltCheckDirectoryMounted();
 }
 
-void MyDir::sltwatcherDirChanged(const QString & path) {
-    qDebug() << "Le contenu du dossier" << path << "a changé.";
+MyDir::~MyDir()
+{
+    if (m_checker) {
+        m_checker->deleteLater();
+    }
 }
 
-void MyDir::sltTimeout() {
-    QFuture<void> future = QtConcurrent::run(this, & MyDir::sltCheckDirectoryMounted);
-    m_futureWatcher.setFuture(future);
-
-    // Démarrer un timer pour vérifier si la tâche est terminée dans un délai donné
-    QTimer::singleShot(100, this, & MyDir::sltCheckTaskCompletion);
+void MyDir::sltwatcherDirChanged(const QString & path)
+{
+    sltCheckDirectoryMounted();
 }
 
 void MyDir::sltCheckDirectoryMounted()
 {
-    bool isMounted = false;
-    QTime time = QTime::currentTime();
-    qDebug() << "Le statut du dossier" << m_path << "est :" << m_iter++ << "," << m_time.msecsTo(time) << "ms";
-    QFileInfo fi(m_path);
-    if (fi.exists()) {
-        qDebug() << "  - exists";
-        if (fi.isDir()) {
-            qDebug() << "  - isDir";
-            qDebug() << "  - size:" << fi.size();
-            QDir dir(m_path);
-            QStringList content = dir.entryList(QDir::NoDotAndDotDot | QDir::Files | QDir::Dirs, QDir::Name);
-            if (content.isEmpty()) {
-                qDebug() << "  - empty";
-            } else {
-                qDebug() << "  - content:" << content.join(", ");
-            }
-
-            QStorageInfo storage(dir);
-            storage.refresh();
-            if (storage.isValid()) {
-                qDebug() << "  - storage valid";
-                if (storage.isReady()) {
-                    qDebug() << "  - storage ready";
-                    QString storageRootPath = storage.rootPath();
-                    QString canonicalPath(dir.canonicalPath());
-                    qDebug() << "  - storage rootPath =" << storageRootPath;
-                    qDebug() << "  - canonical path   =" << canonicalPath;
-                    if (QDir(canonicalPath).exists()) {
-                        qDebug() << "  - canonical path exists";
-                        isMounted = (storageRootPath == canonicalPath);
-                    } else {
-                        qDebug() << "  - canonical path NOT EXISTS";
-                    }
-                }
-            }
+    if (m_checker.isNull()) {
+        m_checker = new DirectoryCheckerThread(m_path);
+        if (m_checker) {
+            QObject::connect(m_checker, & DirectoryCheckerThread::mountingStateChecked, this, & MyDir::setIsMounted, Qt::UniqueConnection);
         }
-    } else {
-        qDebug() << "  - NOT EXISTS";
     }
-    m_time = time;
-    qDebug() << " Done in" << time.msecsTo(QTime::currentTime()) << "ms";
+    if (m_checker) {
+        m_checker->start();
 
-    emit directoryMountingChecked(isMounted);
+        // Démarrer un timer pour vérifier si la tâche est terminée dans un délai donné : 100 ms
+        QTimer::singleShot(100, this, & MyDir::sltCheckTaskCompletion);
+    }
+    // démarre le timer pour la prochaine scruptation
+    m_timer.start();
 }
 
 void MyDir::sltCheckTaskCompletion()
 {
     // Vérifier si la tâche asynchrone est terminée
-    if (! m_futureWatcher.isFinished()) {
-        qDebug() << "La tâche asynchrone n'a pas été terminée dans le délai imparti. Arrêt de la tâche.";
-        m_futureWatcher.cancel(); // Annuler la tâche asynchrone en cours
-        emit directoryMountingChecked(false);
+    if (m_checker && (! m_checker->isFinished())) {
+        m_checker->terminate(); // Annuler la tâche asynchrone en cours
+        setIsMounted(false);
+    }
+}
+
+void MyDir::setIsMounted(bool isMounted)
+{
+    if (m_isMounted == isMounted)
+        return;
+    m_isMounted = isMounted;
+    emit directoryMountingChanged(m_isMounted);
+    if (m_isMounted) {
+        // Ajouter le point de montage à surveiller
+        if (! m_watcher.directories().contains(m_path)) {
+            m_watcher.addPath(m_path);
+        }
     }
 }
